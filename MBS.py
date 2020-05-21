@@ -7,9 +7,7 @@ import os
 from collections import Counter
 import glob
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.linear_model import SGDClassifier
-from sklearn.naive_bayes import GaussianNB
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix
 
@@ -46,12 +44,20 @@ time_cols = ['Loan Sequence', 'Monthly Report Per', 'Curr UPB',
              'Net Sale Pro', 'Non MI recoveries', 'Expenses', 'Legal Cost',
              'Maint', 'Taxes Insur', 'Misc', 'Actual Loss', 'Mod Cost',
              'Step Mod Flag', 'Def Pay Mod', 'ELTV']
+# Add Dtypes
+init_dtypes = {}
+time_dtypes = {}
 
-init_str = 'historical_data1_Q[1]20?8.txt'
-time_str = 'historical_data1_time_Q[1]20?8.txt'
 
-init_data = list(glob.glob(str(cwd) + '/data/' + init_str))
-time_data = list(glob.glob(str(cwd) + '/data/' + time_str))
+def get_glob(quarter, year):
+
+    init_str = f'historical_data1_Q[{quarter}]201{year}.txt'
+    time_str = f'historical_data1_time_Q[{quarter}]201{year}.txt'
+
+    init_glob = list(glob.glob(str(cwd) + '/data/' + init_str))
+    time_glob = list(glob.glob(str(cwd) + '/data/' + time_str))
+
+    return init_glob, time_glob
 
 
 def read_data(init_id, time_id):
@@ -70,8 +76,6 @@ def read_data(init_id, time_id):
     time_big.sort_values(by='Loan Sequence')
 
     delinq = time_big['Current Loan Del']
-    print(delinq.unique)
-    print(init_big.shape[0])
 
     features = ['Credit Score', 'First Payment Date', 'First Timebuyer',
                 'Maturity Date', 'MSA', 'MI %', 'Original IR', 'UPB']
@@ -83,13 +87,14 @@ def read_data(init_id, time_id):
         init_big['First Timebuyer'].map(first_time_transform)
     init_big.fillna(0, inplace=True)
 
-    feat = init_big.loc[:, init_big.columns != 'TARGET']
-    target = init_big.TARGET
+    feat = init_big.loc[:, init_big.columns != 'TARGET'].astype(np.int64)
+    target = init_big.TARGET.astype(np.int64)
+    total_dels = np.sum(target)
 
     features_train, features_test, target_train, target_test = \
-        train_test_split(feat, target, test_size=0.20, random_state=10)
+        train_test_split(feat, target, test_size=0.1, random_state=10)
 
-    return features_train, features_test, target_train, target_test
+    return total_dels, features_train, features_test, target_train, target_test
 
 
 def train_model(features_train, features_test, target_train, target_test):
@@ -109,16 +114,6 @@ def train_model(features_train, features_test, target_train, target_test):
     return clf, cnf_matrix, acc
 
 
-clf, cnf_matrix, acc = \
-    train_model(features_train, features_test, target_train, target_test)
-
-# Delete the dataframe before getting new data and updating the clf
-
-del init_big, time_big
-del features_train, features_test, target_train, target_test
-gc.collect()
-
-
 def update_model(
         features_train, features_test, target_train, target_test, clf):
     # takes in new quarter data and a clf and outputs new trained metrics/clf
@@ -135,11 +130,7 @@ def update_model(
     return clf, cnf_matrix, acc
 
 
-clf, cnf_matrix, acc = \
-    update_model(features_train, features_test, target_train, target_test, clf)
-
-
-def plot_data(cnf_matrix):
+def plot_data(cnf_matrix, quarter, year):
     ax = plt.subplot()
     sns.heatmap(cnf_matrix, annot=True, cmap=plt.cm.Blues,
                 ax=ax, fmt='g')  # annot=True to annotate cells
@@ -147,9 +138,63 @@ def plot_data(cnf_matrix):
     # labels, title and ticks
     ax.set_xlabel('Predicted labels')
     ax.set_ylabel('True labels')
-    ax.set_title('Confusion Matrix')
+    ax.set_title(f'Confusion Matrix for Q{quarter}-201{year}')
     ax.xaxis.set_ticklabels(['0', '1'])
     ax.yaxis.set_ticklabels(['0', '1'])
 
     plt.show()
     return 0
+
+
+def run_full_model(quarter_list, year_list):
+    total_del_count = []
+    first = True
+    for quarter in quarter_list:
+        for year in year_list:
+            init_glob, time_glob = get_glob(quarter, year)
+            for init_id, time_id in zip(init_glob, time_glob):
+                if first:
+                    print('Getting data...')
+                    total_dels, features_train, features_test, target_train, target_test = read_data(
+                        init_id, time_id)
+                    total_del_count.append(total_dels)
+                    print('Training Model...')
+                    try:
+                        clf, cnf_matrix, acc = \
+                            train_model(features_train, features_test,
+                                        target_train, target_test)
+                        print('Plotting data')
+                        plot_data(cnf_matrix, quarter, year)
+                    except ValueError as e:
+                        print(e)
+                    first = False
+                else:
+                    # Delete the dataframe before getting new data
+                    print('Deleting last...')
+                    del features_train, features_test
+                    del target_train, target_test
+                    gc.collect()
+                    # Read in new data
+                    print('Reading new data...')
+                    total_dels, features_train, features_test, target_train, target_test = read_data(
+                        init_id, time_id)
+                    total_del_count.append(total_dels)
+                    # Update the model
+                    try:
+                        print('Updating model...')
+                        clf, cnf_matrix, acc = \
+                            update_model(features_train, features_test,
+                                         target_train, target_test, clf)
+                        print('Plotting data')
+                        plot_data(cnf_matrix, quarter, year)
+                    except ValueError as e:
+                        print(e)
+                    # Plot confusion Matrix for new model
+    print(np.sum(total_del_count))
+    return clf
+
+
+quarter_list = [1, 2, 3, 4]
+year_list = [6, 7, 8]
+
+clf = run_full_model(quarter_list, year_list)
