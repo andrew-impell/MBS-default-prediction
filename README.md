@@ -1,7 +1,21 @@
 # MBS-default-prediction
 A program to take in loan level data and create a model which can predict probability of default of mortgages within Agency MBS. Data from Freddie Mac Loan Level Data
 
+Requires:
+* `gc`
+* `pandas` 
+* `matplotlib`
+* `seaborn`
+* `numpy`
+* `os`
+* `glob`
+* `sklearn`
+# Usage
+
 * main file: MBS.py
+
+`$ python3 MBS.py` 
+
 * data files: data/
 
 User Guide: [Freddie Mac LLD PDF](http://www.freddiemac.com/fmac-resources/research/pdf/user_guide.pdf)
