@@ -50,7 +50,7 @@ time_dtypes = {}
 
 
 def get_glob(quarter, year):
-
+    # Returns a glob of the init, time data file for that quarter, years
     init_str = f'historical_data1_Q[{quarter}]201{year}.txt'
     time_str = f'historical_data1_time_Q[{quarter}]201{year}.txt'
 
@@ -61,7 +61,6 @@ def get_glob(quarter, year):
 
 
 def read_data(init_id, time_id):
-
     # Read in data from a specific quarter then output the train test data
     # init_id: file location of the initialization data
     # time_id: file location of the loan performance data
@@ -109,6 +108,7 @@ def train_model(features_train, features_test, target_train, target_test):
     predicted_probas = model.predict_proba(features_test)
 
     acc = accuracy_score(target_test, target_pred)
+    print(f'Accuracy: {acc*100}%')
 
     cnf_matrix = confusion_matrix(target_test, target_pred)
     return clf, cnf_matrix, acc
@@ -125,12 +125,13 @@ def update_model(
     target_pred = clf.predict(features_test)
     predicted_probas = model.predict_proba(features_test)
     acc = accuracy_score(target_test, target_pred)
-
+    print(f'Accuracy: {acc*100}%')
     cnf_matrix = confusion_matrix(target_test, target_pred)
     return clf, cnf_matrix, acc
 
 
 def plot_data(cnf_matrix, quarter, year):
+    # Plot data output from model
     ax = plt.subplot()
     sns.heatmap(cnf_matrix, annot=True, cmap=plt.cm.Blues,
                 ax=ax, fmt='g')  # annot=True to annotate cells
@@ -147,6 +148,7 @@ def plot_data(cnf_matrix, quarter, year):
 
 
 def run_full_model(quarter_list, year_list):
+    # iteratively run each quarter, year and then update model
     total_del_count = []
     first = True
     for quarter in quarter_list:
@@ -154,6 +156,7 @@ def run_full_model(quarter_list, year_list):
             init_glob, time_glob = get_glob(quarter, year)
             for init_id, time_id in zip(init_glob, time_glob):
                 if first:
+                    # Run first model
                     print('Getting data...')
                     total_dels, features_train, features_test, target_train, target_test = read_data(
                         init_id, time_id)
